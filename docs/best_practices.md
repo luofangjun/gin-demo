@@ -15,23 +15,31 @@
 
 **示例：**
 ```go
-// ServiceA 服务A结构体，封装多个方法
-type ServiceA struct {
-    serviceB ServiceBInterface // 通过依赖注入获取其他服务
+// ServiceC 服务C结构体，封装多个方法
+type ServiceC struct {
+    baseURL string // API 基础URL
 }
 
-// MethodA 方法A - 纯业务逻辑，无追踪代码
-func (s *ServiceA) MethodA(ctx context.Context, userID uint) (string, error) {
-    // 业务逻辑
-    // 调用服务B的方法A
-    result, err := s.serviceB.MethodA(ctx, processedData)
-    return result, err
+// Calculate 方法 - 纯业务逻辑，无追踪代码
+func (s *ServiceC) Calculate(ctx context.Context, number int) (string, error) {
+    // 业务逻辑：调用外部 API
+    reqBody := map[string]int{"number": number}
+    resp, err := pkg.HTTPClient().R().
+        SetContext(ctx).
+        SetBody(reqBody).
+        Post(s.baseURL + "/api/calculate")
+    return resp.String(), err
 }
 
-// MethodB 方法B - 纯业务逻辑，无追踪代码
-func (s *ServiceA) MethodB(ctx context.Context, data string) (string, error) {
-    // 业务逻辑
-    return result, nil
+// Process 方法 - 纯业务逻辑，无追踪代码
+func (s *ServiceC) Process(ctx context.Context, content string) (string, error) {
+    // 业务逻辑：调用外部 API
+    reqBody := map[string]string{"content": content}
+    resp, err := pkg.HTTPClient().R().
+        SetContext(ctx).
+        SetBody(reqBody).
+        Post(s.baseURL + "/api/process")
+    return resp.String(), err
 }
 ```
 
@@ -46,18 +54,18 @@ func (s *ServiceA) MethodB(ctx context.Context, data string) (string, error) {
 
 **示例：**
 ```go
-// ✅ 好的实践：通过构造函数注入依赖
-func NewServiceA(serviceB ServiceBInterface) *ServiceA {
-    return &ServiceA{
-        serviceB: serviceB,
+// ✅ 好的实践：通过构造函数注入配置
+func NewServiceC(baseURL string) *ServiceC {
+    return &ServiceC{
+        baseURL: baseURL,
     }
 }
 
-// ❌ 不好的实践：在方法内部创建依赖
-func (s *ServiceA) MethodA(ctx context.Context, userID uint) (string, error) {
-    serviceB := NewServiceBWithTrace() // 不推荐：硬编码依赖
-    result, err := serviceB.MethodA(ctx, data)
-    return result, err
+// ❌ 不好的实践：在方法内部硬编码配置
+func (s *ServiceC) Calculate(ctx context.Context, number int) (string, error) {
+    baseURL := "http://localhost:8081" // 不推荐：硬编码配置
+    resp, err := pkg.HTTPClient().R().Post(baseURL + "/api/calculate")
+    return resp.String(), err
 }
 ```
 
@@ -72,20 +80,22 @@ func (s *ServiceA) MethodA(ctx context.Context, userID uint) (string, error) {
 
 **示例：**
 ```go
-// 定义服务B的接口
-type ServiceBInterface interface {
-    MethodA(ctx context.Context, data string) (string, error)
+// 定义服务C的接口
+type ServiceCInterface interface {
+    Calculate(ctx context.Context, number int) (string, error)
+    Process(ctx context.Context, content string) (string, error)
 }
 
-// ServiceA 依赖接口，而不是具体实现
-type ServiceA struct {
-    serviceB ServiceBInterface // 依赖接口
+// ServiceC 实现接口
+type ServiceC struct {
+    baseURL string
 }
 
-// ServiceB 实现接口
-type ServiceB struct{}
+func (s *ServiceC) Calculate(ctx context.Context, number int) (string, error) {
+    // 实现
+}
 
-func (s *ServiceB) MethodA(ctx context.Context, data string) (string, error) {
+func (s *ServiceC) Process(ctx context.Context, content string) (string, error) {
     // 实现
 }
 ```
@@ -101,23 +111,18 @@ func (s *ServiceB) MethodA(ctx context.Context, data string) (string, error) {
 
 **示例：**
 ```go
-// ServiceFactory 服务工厂
-type ServiceFactory struct {
-    serviceB ServiceBInterface
-    serviceA *ServiceAWithTrace
+// Factory 服务工厂
+type Factory struct {
+    serviceC *ServiceCWithTrace
 }
 
-// NewServiceFactory 创建服务工厂
-func NewServiceFactory() *ServiceFactory {
-    // 创建服务B（带追踪）
-    serviceB := NewServiceBWithTrace()
+// NewFactory 创建服务工厂
+func NewFactory() *Factory {
+    // 创建服务C（带追踪，统一管理配置）
+    serviceC := NewServiceCWithTrace("http://localhost:8081")
 
-    // 创建服务A（依赖注入服务B，带追踪）
-    serviceA := NewServiceAWithTrace(serviceB)
-
-    return &ServiceFactory{
-        serviceB: serviceB,
-        serviceA: serviceA,
+    return &Factory{
+        serviceC: serviceC,
     }
 }
 ```
@@ -136,11 +141,11 @@ func NewServiceFactory() *ServiceFactory {
 // UserController 用户控制器
 type UserController struct {
     BaseController
-    serviceFactory *ServiceFactory // 通过依赖注入获取服务工厂
+    serviceFactory *service.Factory // 通过依赖注入获取服务工厂
 }
 
 // NewUserController 创建用户控制器
-func NewUserController(serviceFactory *ServiceFactory) *UserController {
+func NewUserController(serviceFactory *service.Factory) *UserController {
     return &UserController{
         serviceFactory: serviceFactory,
     }
@@ -149,8 +154,8 @@ func NewUserController(serviceFactory *ServiceFactory) *UserController {
 // 使用服务
 func (uc *UserController) GetUserByID(c *gin.Context) {
     // 从服务工厂获取服务
-    serviceA := uc.serviceFactory.GetServiceA()
-    result, err := serviceA.MethodA(c.Request.Context(), userID)
+    serviceC := uc.serviceFactory.GetServiceC()
+    result, err := serviceC.Calculate(c.Request.Context(), 5)
     // ...
 }
 ```
@@ -160,25 +165,54 @@ func (uc *UserController) GetUserByID(c *gin.Context) {
 ### 1. 定义服务接口
 
 ```go
-// ServiceBInterface 服务B的接口定义
-type ServiceBInterface interface {
-    MethodA(ctx context.Context, data string) (string, error)
+// ServiceCInterface 服务C的接口定义
+type ServiceCInterface interface {
+    Calculate(ctx context.Context, number int) (string, error)
+    Process(ctx context.Context, content string) (string, error)
 }
 ```
 
 ### 2. 实现服务（纯业务逻辑）
 
 ```go
-// ServiceB 服务B结构体
-type ServiceB struct{}
-
-func NewServiceB() *ServiceB {
-    return &ServiceB{}
+// ServiceC 服务C结构体
+type ServiceC struct {
+    baseURL string // API 基础URL
 }
 
-// MethodA 方法A - 纯业务逻辑，无追踪代码
-func (s *ServiceB) MethodA(ctx context.Context, data string) (string, error) {
-    // 业务逻辑
+func NewServiceC(baseURL string) *ServiceC {
+    return &ServiceC{
+        baseURL: baseURL,
+    }
+}
+
+// Calculate 方法 - 纯业务逻辑，无追踪代码
+func (s *ServiceC) Calculate(ctx context.Context, number int) (string, error) {
+    reqBody := map[string]int{"number": number}
+    url := s.baseURL + "/api/calculate"
+    resp, err := pkg.HTTPClient().R().
+        SetContext(ctx).
+        SetBody(reqBody).
+        Post(url)
+    if err != nil {
+        return "", err
+    }
+    // 解析响应...
+    return result, nil
+}
+
+// Process 方法 - 纯业务逻辑，无追踪代码
+func (s *ServiceC) Process(ctx context.Context, content string) (string, error) {
+    reqBody := map[string]string{"content": content}
+    url := s.baseURL + "/api/process"
+    resp, err := pkg.HTTPClient().R().
+        SetContext(ctx).
+        SetBody(reqBody).
+        Post(url)
+    if err != nil {
+        return "", err
+    }
+    // 解析响应...
     return result, nil
 }
 ```
@@ -186,73 +220,66 @@ func (s *ServiceB) MethodA(ctx context.Context, data string) (string, error) {
 ### 3. 创建带追踪的包装器
 
 ```go
-// ServiceBWithTrace 带追踪的服务B包装器
-type ServiceBWithTrace struct {
-    *ServiceB
-    methodA func(context.Context, string) (string, error)
+// ServiceCWithTrace 带追踪的服务C包装器
+type ServiceCWithTrace struct {
+    *ServiceC
+    calculate func(context.Context, int) (string, error)
+    process   func(context.Context, string) (string, error)
 }
 
-func NewServiceBWithTrace() *ServiceBWithTrace {
-    serviceB := NewServiceB()
-    return &ServiceBWithTrace{
-        ServiceB: serviceB,
-        methodA: pkg.TraceServiceFunc("ServiceB.MethodA", serviceB.MethodA,
-            func(ctx context.Context, data string) []attribute.KeyValue {
+func NewServiceCWithTrace(baseURL string) *ServiceCWithTrace {
+    serviceC := NewServiceC(baseURL)
+    return &ServiceCWithTrace{
+        ServiceC: serviceC,
+        calculate: pkg.TraceServiceFunc("ServiceC.Calculate", serviceC.Calculate,
+            func(ctx context.Context, number int) []attribute.KeyValue {
                 return []attribute.KeyValue{
-                    attribute.String("service.name", "ServiceB"),
-                    attribute.String("method", "MethodA"),
+                    attribute.String("service.name", "ServiceC"),
+                    attribute.String("method", "Calculate"),
+                    attribute.Int("input.number", number),
+                }
+            }),
+        process: pkg.TraceServiceFunc("ServiceC.Process", serviceC.Process,
+            func(ctx context.Context, content string) []attribute.KeyValue {
+                return []attribute.KeyValue{
+                    attribute.String("service.name", "ServiceC"),
+                    attribute.String("method", "Process"),
+                    attribute.String("input.content", content),
                 }
             }),
     }
 }
 
-func (s *ServiceBWithTrace) MethodA(ctx context.Context, data string) (string, error) {
-    return s.methodA(ctx, data)
+func (s *ServiceCWithTrace) Calculate(ctx context.Context, number int) (string, error) {
+    return s.calculate(ctx, number)
+}
+
+func (s *ServiceCWithTrace) Process(ctx context.Context, content string) (string, error) {
+    return s.process(ctx, content)
 }
 ```
 
-### 4. 创建服务A（依赖服务B）
-
-```go
-// ServiceA 服务A结构体
-type ServiceA struct {
-    serviceB ServiceBInterface // 依赖接口
-}
-
-func NewServiceA(serviceB ServiceBInterface) *ServiceA {
-    return &ServiceA{
-        serviceB: serviceB,
-    }
-}
-
-// MethodA 方法A - 调用服务B的方法A
-func (s *ServiceA) MethodA(ctx context.Context, userID uint) (string, error) {
-    // 业务逻辑
-    result, err := s.serviceB.MethodA(ctx, processedData)
-    return result, err
-}
-```
-
-### 5. 创建服务工厂
+### 4. 创建服务工厂
 
 ```go
 // Factory 服务工厂（位于 service/factory.go）
 type Factory struct {
-    serviceB ServiceBInterface
-    serviceA *ServiceAWithTrace
+    serviceC *ServiceCWithTrace
 }
 
 func NewFactory() *Factory {
-    serviceB := NewServiceBWithTrace()
-    serviceA := NewServiceAWithTrace(serviceB)
+    serviceC := NewServiceCWithTrace("http://localhost:8081")
     return &Factory{
-        serviceB: serviceB,
-        serviceA: serviceA,
+        serviceC: serviceC,
     }
+}
+
+func (f *Factory) GetServiceC() *ServiceCWithTrace {
+    return f.serviceC
 }
 ```
 
-### 6. 在路由中使用
+### 5. 在路由中使用
 
 ```go
 import (
@@ -282,52 +309,7 @@ func SetupRouter() *gin.Engine {
 4. **在服务工厂中注册**
 5. **在控制器中使用**
 
-**示例：添加 ServiceC**
-
-```go
-// 1. 定义服务C
-type ServiceC struct{}
-
-func NewServiceC() *ServiceC {
-    return &ServiceC{}
-}
-
-func (s *ServiceC) Process(ctx context.Context, data string) (string, error) {
-    // 业务逻辑
-    return result, nil
-}
-
-// 2. 创建带追踪的包装器
-type ServiceCWithTrace struct {
-    *ServiceC
-    process func(context.Context, string) (string, error)
-}
-
-func NewServiceCWithTrace() *ServiceCWithTrace {
-    serviceC := NewServiceC()
-    return &ServiceCWithTrace{
-        ServiceC: serviceC,
-        process: pkg.TraceServiceFunc("ServiceC.Process", serviceC.Process, nil),
-    }
-}
-
-// 3. 在服务工厂中注册（位于 service/factory.go）
-func NewFactory() *Factory {
-    // ... 现有代码 ...
-    serviceC := NewServiceCWithTrace()
-    return &Factory{
-        // ... 现有字段 ...
-        serviceC: serviceC,
-    }
-}
-
-// 4. 在控制器中使用
-func (uc *UserController) SomeMethod(c *gin.Context) {
-    serviceC := uc.serviceFactory.GetServiceC()
-    result, err := serviceC.Process(c.Request.Context(), data)
-    // ...
-}
-```
+**参考示例：** 当前项目中的 `ServiceC` 就是完整的实现示例，位于 `service/service_c.go` 和 `service/factory.go`。
 
 ## 服务使用示例
 
@@ -339,85 +321,66 @@ func (uc *UserController) SomeMethod(c *gin.Context) {
 
 **完整示例：**
 
+参考 `service/service_c.go` 文件，其中包含完整的实现：
+
 ```go
 // 1. 定义纯业务服务（无追踪代码）
-type ServiceA struct {
-    serviceB ServiceBInterface // 通过依赖注入获取其他服务
+type ServiceC struct {
+    baseURL string
 }
 
-func NewServiceA(serviceB ServiceBInterface) *ServiceA {
-    return &ServiceA{
-        serviceB: serviceB,
-    }
+func NewServiceC(baseURL string) *ServiceC {
+    return &ServiceC{baseURL: baseURL}
 }
 
-// MethodA 方法A - 纯业务逻辑，无追踪代码
-func (s *ServiceA) MethodA(ctx context.Context, userID uint) (string, error) {
-    // 模拟业务处理
-    time.Sleep(100 * time.Millisecond)
-    processedData := fmt.Sprintf("user_%d_data", userID)
-    
-    // 调用服务B（通过接口调用，自动建立链路追踪关系）
-    result, err := s.serviceB.MethodA(ctx, processedData)
-    if err != nil {
-        return "", fmt.Errorf("服务A方法A调用服务B方法A失败: %v", err)
-    }
-    
+// Calculate 方法 - 纯业务逻辑，无追踪代码
+func (s *ServiceC) Calculate(ctx context.Context, number int) (string, error) {
+    reqBody := map[string]int{"number": number}
+    url := s.baseURL + "/api/calculate"
+    resp, err := pkg.HTTPClient().R().
+        SetContext(ctx).
+        SetBody(reqBody).
+        Post(url)
+    // 解析响应...
     return result, nil
 }
 
-// MethodB 方法B - 纯业务逻辑，无追踪代码
-func (s *ServiceA) MethodB(ctx context.Context, data string) (string, error) {
-    // 模拟业务处理
-    time.Sleep(50 * time.Millisecond)
-    return fmt.Sprintf("ServiceA.MethodB processed: %s", data), nil
+// Process 方法 - 纯业务逻辑，无追踪代码
+func (s *ServiceC) Process(ctx context.Context, content string) (string, error) {
+    reqBody := map[string]string{"content": content}
+    url := s.baseURL + "/api/process"
+    resp, err := pkg.HTTPClient().R().
+        SetContext(ctx).
+        SetBody(reqBody).
+        Post(url)
+    // 解析响应...
+    return result, nil
 }
 
 // 2. 创建带追踪的包装器
-type ServiceAWithTrace struct {
-    *ServiceA
-    methodA func(context.Context, uint) (string, error)
-    methodB func(context.Context, string) (string, error)
+type ServiceCWithTrace struct {
+    *ServiceC
+    calculate func(context.Context, int) (string, error)
+    process   func(context.Context, string) (string, error)
 }
 
-func NewServiceAWithTrace(serviceB ServiceBInterface) *ServiceAWithTrace {
-    serviceA := NewServiceA(serviceB)
-    return &ServiceAWithTrace{
-        ServiceA: serviceA,
-        // 方法A：带属性设置（记录关键业务参数）
-        methodA: pkg.TraceServiceFunc("ServiceA.MethodA", serviceA.MethodA,
-            func(ctx context.Context, userID uint) []attribute.KeyValue {
-                return []attribute.KeyValue{
-                    attribute.String("service.name", "ServiceA"),
-                    attribute.String("method", "MethodA"),
-                    attribute.Int("user.id", int(userID)),
-                }
-            }),
-        // 方法B：不带属性设置（属性设置是可选的）
-        methodB: pkg.TraceServiceFunc("ServiceA.MethodB", serviceA.MethodB, nil),
+func NewServiceCWithTrace(baseURL string) *ServiceCWithTrace {
+    serviceC := NewServiceC(baseURL)
+    return &ServiceCWithTrace{
+        ServiceC: serviceC,
+        calculate: pkg.TraceServiceFunc("ServiceC.Calculate", serviceC.Calculate, ...),
+        process: pkg.TraceServiceFunc("ServiceC.Process", serviceC.Process, ...),
     }
-}
-
-// MethodA 带追踪的方法A
-func (s *ServiceAWithTrace) MethodA(ctx context.Context, userID uint) (string, error) {
-    return s.methodA(ctx, userID)
-}
-
-// MethodB 带追踪的方法B
-func (s *ServiceAWithTrace) MethodB(ctx context.Context, data string) (string, error) {
-    return s.methodB(ctx, data)
 }
 
 // 3. 使用方式
 func (uc *UserController) GetUserByID(c *gin.Context) {
-    // 从服务工厂获取服务A（所有方法自动追踪）
-    serviceA := uc.serviceFactory.GetServiceA()
+    // 从服务工厂获取服务C（所有方法自动追踪）
+    serviceC := uc.serviceFactory.GetServiceC()
     
-    // 调用方法A（自动追踪）
-    resultA, err := serviceA.MethodA(c.Request.Context(), userID)
-    
-    // 调用方法B（自动追踪）
-    resultB, err := serviceA.MethodB(c.Request.Context(), "test-data")
+    // 调用方法（自动追踪）
+    result, err := serviceC.Calculate(c.Request.Context(), 5)
+    result, err := serviceC.Process(c.Request.Context(), "hello world")
 }
 ```
 
@@ -456,19 +419,19 @@ methodA := pkg.TraceServiceFunc("ServiceA.MethodA", serviceA.MethodA,
 
 ```go
 // ✅ 好的实践：只记录关键信息
-methodA := pkg.TraceServiceFunc("ServiceA.MethodA", serviceA.MethodA,
-    func(ctx context.Context, userID uint) []attribute.KeyValue {
+calculate := pkg.TraceServiceFunc("ServiceC.Calculate", serviceC.Calculate,
+    func(ctx context.Context, number int) []attribute.KeyValue {
         return []attribute.KeyValue{
-            attribute.Int("user.id", int(userID)),        // 关键业务参数
-            attribute.String("service.name", "ServiceA"), // 服务标识
+            attribute.Int("input.number", number),        // 关键业务参数
+            attribute.String("service.name", "ServiceC"), // 服务标识
         }
     })
 
 // ❌ 不好的实践：记录过多或不必要的信息
-methodA := pkg.TraceServiceFunc("ServiceA.MethodA", serviceA.MethodA,
-    func(ctx context.Context, userID uint) []attribute.KeyValue {
+calculate := pkg.TraceServiceFunc("ServiceC.Calculate", serviceC.Calculate,
+    func(ctx context.Context, number int) []attribute.KeyValue {
         return []attribute.KeyValue{
-            attribute.Int("user.id", int(userID)),
+            attribute.Int("input.number", number),
             attribute.String("timestamp", time.Now().String()), // 不必要
             attribute.String("random", uuid.New().String()),    // 不必要
         }
@@ -488,7 +451,7 @@ func (s *ServiceC) Calculate(ctx context.Context, number int) (string, error) {
     
     // 使用带追踪的 HTTP 客户端，自动注入 TraceID 到请求头
     url := s.baseURL + "/api/calculate"
-    resp, err := pkg.HTTPClient.R().
+    resp, err := pkg.HTTPClient().R().
         SetContext(ctx).
         SetBody(reqBody).
         Post(url)
@@ -496,17 +459,25 @@ func (s *ServiceC) Calculate(ctx context.Context, number int) (string, error) {
         return "", fmt.Errorf("调用计算接口失败: %v", err)
     }
     
-    // 检查响应状态码
-    if !resp.IsSuccess() {
-        return "", fmt.Errorf("计算接口返回错误状态码: %d, 响应: %s", resp.StatusCode, resp.String())
+    // 解析响应（标准 API 响应格式：{"code":0, "message":"xxx", "data":{...}}）
+    var apiResp APIResponse
+    if err := resp.UnmarshalJson(&apiResp); err != nil {
+        return "", fmt.Errorf("解析响应失败: %v", err)
     }
     
-    return resp.String(), nil
+    // 检查业务状态码（code==0 表示成功）
+    if apiResp.Code != 0 {
+        return "", fmt.Errorf("计算接口返回错误: %s", apiResp.Message)
+    }
+    
+    // 返回 data 字段
+    dataBytes, _ := json.Marshal(apiResp.Data)
+    return string(dataBytes), nil
 }
 ```
 
 **关键点：**
-- ✅ 使用 `pkg.HTTPClient`，自动追踪所有 HTTP 请求
+- ✅ 使用 `pkg.HTTPClient()`（函数调用），自动追踪所有 HTTP 请求
 - ✅ 传递 `ctx`，自动建立追踪链路
 - ✅ 业务代码完全不需要追踪相关代码
 

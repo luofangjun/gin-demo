@@ -1,6 +1,10 @@
 package router
 
 import (
+	"net/http"
+	"net/http/pprof"
+
+	"gin-project/config"
 	"gin-project/controller"
 	"gin-project/middleware"
 	"gin-project/service"
@@ -17,6 +21,11 @@ func SetupRouter() *gin.Engine {
 	r.Use(middleware.RecoveryMiddleware()) // 恢复中间件（最先添加，确保能捕获所有 panic）
 	r.Use(middleware.LoggerMiddleware())   // 日志中间件
 	r.Use(middleware.TracingMiddleware())  // 追踪中间件（在日志之后，确保日志能记录追踪信息）
+
+	// 根据 app.Mode 决定是否开启 pprof（仅在 debug 模式下开启）
+	if config.Cfg != nil && config.Cfg.App.Mode == "debug" {
+		setupPprof(r)
+	}
 
 	// 健康检查路由（不需要追踪）
 	healthCtrl := &controller.HealthController{}
@@ -45,4 +54,22 @@ func SetupRouter() *gin.Engine {
 	}
 
 	return r
+}
+
+// setupPprof 配置 pprof 性能分析路由（仅在 debug 模式下启用）
+func setupPprof(r *gin.Engine) {
+	pprofGroup := r.Group("/debug/pprof")
+	{
+		pprofGroup.GET("/", gin.WrapH(http.HandlerFunc(pprof.Index)))
+		pprofGroup.GET("/cmdline", gin.WrapH(http.HandlerFunc(pprof.Cmdline)))
+		pprofGroup.GET("/profile", gin.WrapH(http.HandlerFunc(pprof.Profile)))
+		pprofGroup.GET("/symbol", gin.WrapH(http.HandlerFunc(pprof.Symbol)))
+		pprofGroup.GET("/trace", gin.WrapH(http.HandlerFunc(pprof.Trace)))
+		pprofGroup.GET("/allocs", gin.WrapH(pprof.Handler("allocs")))
+		pprofGroup.GET("/block", gin.WrapH(pprof.Handler("block")))
+		pprofGroup.GET("/goroutine", gin.WrapH(pprof.Handler("goroutine")))
+		pprofGroup.GET("/heap", gin.WrapH(pprof.Handler("heap")))
+		pprofGroup.GET("/mutex", gin.WrapH(pprof.Handler("mutex")))
+		pprofGroup.GET("/threadcreate", gin.WrapH(pprof.Handler("threadcreate")))
+	}
 }

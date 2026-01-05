@@ -2,8 +2,6 @@
 app:
   name: gin-project
   port: 8080
-  grpcPort: 50051
-  gatewayPort: 8081
   mode: debug
 
 # 数据库配置

@@ -93,13 +93,14 @@ var HTTPClient = func() *req.Client {
 **业务代码中使用（零代码入侵）：**
 
 ```go
-// service/service_b.go
-func (s *ServiceB) MethodA(ctx context.Context, data string) (string, error) {
+// service/service_c.go
+func (s *ServiceC) Calculate(ctx context.Context, number int) (string, error) {
     // 使用带追踪的 HTTP 客户端，自动注入 TraceID 到请求头
-    url := "https://httpbin.org/delay/1"
-    resp, err := pkg.HTTPClient.R().
+    url := s.baseURL + "/api/calculate"
+    resp, err := pkg.HTTPClient().R().
         SetContext(ctx).
-        Get(url)
+        SetBody(reqBody).
+        Post(url)
     // 自动追踪，无需任何手动代码
     return result, nil
 }
@@ -293,15 +294,15 @@ func TraceServiceFunc[T any, R any](
 
 ```go
 // 方式1：不带属性（最简单）
-methodB := pkg.TraceServiceFunc("ServiceA.MethodB", serviceA.MethodB, nil)
+process := pkg.TraceServiceFunc("ServiceC.Process", serviceC.Process, nil)
 
 // 方式2：带属性（可选，用于重要参数）
-methodA := pkg.TraceServiceFunc("ServiceA.MethodA", serviceA.MethodA,
-    func(ctx context.Context, userID uint) []attribute.KeyValue {
+calculate := pkg.TraceServiceFunc("ServiceC.Calculate", serviceC.Calculate,
+    func(ctx context.Context, number int) []attribute.KeyValue {
         return []attribute.KeyValue{
-            attribute.String("service.name", "ServiceA"),
-            attribute.String("method", "MethodA"),
-            attribute.Int("user.id", int(userID)),
+            attribute.String("service.name", "ServiceC"),
+            attribute.String("method", "Calculate"),
+            attribute.Int("input.number", number),
         }
     })
 ```
@@ -385,7 +386,7 @@ func (s *ServiceC) Calculate(ctx context.Context, number int) (string, error) {
     
     // 使用带追踪的 HTTP 客户端，自动注入 TraceID 到请求头
     url := s.baseURL + "/api/calculate"
-    resp, err := pkg.HTTPClient.R().
+    resp, err := pkg.HTTPClient().R().
         SetContext(ctx).
         SetBody(reqBody).
         Post(url)
@@ -406,7 +407,7 @@ func (s *ServiceC) Calculate(ctx context.Context, number int) (string, error) {
    // ✅ 正确：传递 context
    err := database.DB.WithContext(ctx).First(user, id).Error
    err := database.RedisClient.Get(ctx, key).Result()
-   resp, err := pkg.HTTPClient.R().SetContext(ctx).Get(url)
+   resp, err := pkg.HTTPClient().R().SetContext(ctx).Get(url)
    ```
 
 2. **使用标准客户端**

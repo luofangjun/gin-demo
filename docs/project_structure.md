@@ -7,9 +7,7 @@
 ```
 gin-project/
 ├── service/               # 服务层（外部服务调用）
-│   ├── service_a.go       # 服务A实现
-│   ├── service_b.go       # 服务B实现
-│   ├── service_c.go       # 服务C实现
+│   ├── service_c.go       # 服务C实现（HTTP 调用示例）
 │   └── factory.go         # 服务工厂
 ├── pkg/                    # 公共工具包（可被外部引用）
 │   ├── tracing.go          # 链路追踪装饰器
@@ -34,7 +32,7 @@ gin-project/
 │   ├── logger.go          # 日志中间件
 │   └── recovery.go        # 恢复中间件
 ├── router/                 # 路由配置
-│   └── route.go           # 路由定义
+│   └── route.go           # 路由定义（包含 pprof 性能分析，仅在 debug 模式）
 ├── docs/                   # 文档目录
 │   ├── README.md          # 文档索引
 │   ├── project_structure.md  # 项目结构说明
@@ -91,6 +89,7 @@ gin-project/
 - 路由定义
 - 路由分组
 - 中间件注册
+- **pprof 性能分析**：仅在 `app.mode=debug` 时启用，提供 `/debug/pprof/*` 路由
 
 ## 设计原则
 
