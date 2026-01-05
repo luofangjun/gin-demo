@@ -1,0 +1,37 @@
+# 应用配置文件
+app:
+  name: gin-project
+  port: 8080
+  grpcPort: 50051
+  gatewayPort: 8081
+  mode: debug
+
+# 数据库配置
+database:
+  mysql:
+    host: 127.0.0.1
+    port: 3306
+    username: root
+    password: 123456
+    database: gin_project
+    charset: utf8mb4
+    parseTime: true
+    loc: Local
+    maxIdleConns: 10
+    maxOpenConns: 100
+
+# Redis配置
+redis:
+  addr: 127.0.0.1:6379
+  password: 123456
+  db: 0
+  poolSize: 10
+
+# 追踪配置
+tracing:
+  enabled: true              # 总开关：是否启用追踪（false=完全禁用，零性能开销）
+  endpoint: "host.docker.internal:4317"  # Jaeger OTLP gRPC 端点（与 docker run -p 4317:4317 对应）
+  serviceName: "gin-project" # 服务名称
+  sampleRate: 1.0           # 采样率：0.0-1.0（1.0=100%采样，0.1=10%采样，生产环境推荐0.1-0.5）
+  batchSize: 512            # 批量大小：每次批量导出的span数量（默认512）
+  batchTimeout: 5            # 批量超时（秒）：超过此时间即使未达到批量大小也会导出（默认5秒）

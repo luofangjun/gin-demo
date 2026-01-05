@@ -1,0 +1,176 @@
+### Gin项目 API 测试文件
+### 使用说明：在 VS Code 中安装 REST Client 插件后，可以直接点击 "Send Request" 发送请求
+
+# ============================================
+# 基础配置
+# ============================================
+@baseUrl = http://localhost:8082
+@contentType = application/json
+
+# ============================================
+# 健康检查接口
+# ============================================
+
+### 1. 健康检查 - 检查服务是否正常运行
+GET {{baseUrl}}/health
+Accept: {{contentType}}
+
+###
+
+### 2. 就绪检查 - 检查服务是否就绪（包括数据库和Redis连接）
+GET {{baseUrl}}/readiness
+Accept: {{contentType}}
+
+###
+
+### 3. 存活检查 - 检查服务是否存活
+GET {{baseUrl}}/liveness
+Accept: {{contentType}}
+
+# ============================================
+# 用户管理接口
+# ============================================
+
+### 4. 创建用户 - 创建新用户
+POST {{baseUrl}}/api/user/create
+Content-Type: {{contentType}}
+
+{
+  "name": "张三",
+  "email": "zhangsan@example.com",
+  "age": 25,
+  "status": 1
+}
+
+###
+
+### 5. 创建用户 - 测试邮箱验证
+POST {{baseUrl}}/api/user/create
+Content-Type: {{contentType}}
+
+{
+  "name": "李四",
+  "email": "lisi@example.com",
+  "age": 30,
+  "status": 1
+}
+
+###
+
+### 6. 创建用户 - 测试错误情况（缺少必填字段）
+POST {{baseUrl}}/api/user/create
+Content-Type: {{contentType}}
+
+{
+  "name": "王五",
+  "age": 28
+}
+
+###
+
+### 7. 创建用户 - 测试错误情况（邮箱格式错误）
+POST {{baseUrl}}/api/user/create
+Content-Type: {{contentType}}
+
+{
+  "name": "赵六",
+  "email": "invalid-email",
+  "age": 22,
+  "status": 1
+}
+
+###
+
+### 8. 查询用户 - 根据ID查询用户（会触发缓存）
+POST {{baseUrl}}/api/user/query
+Content-Type: {{contentType}}
+
+{
+  "id": 1
+}
+
+###
+
+### 9. 查询用户 - 查询不存在的用户
+POST {{baseUrl}}/api/user/query
+Content-Type: {{contentType}}
+
+{
+  "id": 99999
+}
+
+###
+
+### 10. 查询用户 - 测试错误情况（缺少ID）
+POST {{baseUrl}}/api/user/query
+Content-Type: {{contentType}}
+
+{
+}
+
+###
+
+### 11. 更新用户 - 更新用户信息
+PUT {{baseUrl}}/api/user/update
+Content-Type: {{contentType}}
+
+{
+  "id": 1,
+  "name": "张三丰",
+  "email": "zhangsan@example.com",
+  "age": 26,
+  "status": 1
+}
+
+###
+
+### 12. 更新用户 - 更新用户年龄
+PUT {{baseUrl}}/api/user/update
+Content-Type: {{contentType}}
+
+{
+  "id": 1,
+  "name": "张三",
+  "email": "zhangsan@example.com",
+  "age": 27,
+  "status": 1
+}
+
+###
+
+### 13. 更新用户 - 测试错误情况（用户不存在）
+PUT {{baseUrl}}/api/user/update
+Content-Type: {{contentType}}
+
+{
+  "id": 99999,
+  "name": "不存在的用户",
+  "email": "notexist@example.com",
+  "age": 20,
+  "status": 1
+}
+
+###
+
+### 14. 更新用户 - 测试错误情况（缺少必填字段）
+PUT {{baseUrl}}/api/user/update
+Content-Type: {{contentType}}
+
+{
+  "name": "测试",
+  "email": "test@example.com"
+}
+
+###
+
+# ============================================
+# 测试流程示例
+# ============================================
+
+### 完整测试流程：
+### 1. 先执行健康检查（#4）
+### 2. 创建用户（#5）
+### 3. 查询用户（#9）- 第一次查询会从数据库获取并缓存
+### 4. 再次查询用户（#9）- 第二次查询会从缓存获取
+### 5. 更新用户（#12）
+### 6. 再次查询用户（#9）- 更新后缓存已清除，会重新从数据库获取
